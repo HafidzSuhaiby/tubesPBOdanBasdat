@@ -275,29 +275,6 @@ class ForgotPasswordWindow(QWidget):
 # Jalankan aplikasi
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-
-    # Set global stylesheet untuk QMessageBox
-    app.setStyleSheet("""
-        QMessageBox {
-            background-color: white;
-        }
-        QMessageBox QLabel {
-            color: black;
-            font-size: 14px;
-        }
-        QMessageBox QPushButton {
-            background-color: #4e54c8;
-            color: white;
-            padding: 6px 12px;
-            border: none;
-            border-radius: 5px;
-            min-width: 80px;
-        }
-        QMessageBox QPushButton:hover {
-            background-color: #5d63d8;
-        }
-    """)
-
     window = LoginWindow()
     window.show()
     sys.exit(app.exec_())
