@@ -5,7 +5,7 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont, QPalette, QLinearGradient, QColor, QBrush
 import sys
 from database import register_user, login_user, reset_password
-from menu import MenuWindow  # Nanti kamu buat
+from menu import MenuWindow  
 class RegisterWindow(QWidget):
     def __init__(self):
         super().__init__()
@@ -23,7 +23,7 @@ class RegisterWindow(QWidget):
 
         # Card putih di tengah
         self.card = QFrame(self)
-        self.card.setFixedSize(300, 300)
+        self.card.setFixedSize(300, 400)
         self.card.setStyleSheet("""
             QFrame {
                 background-color: white;
@@ -43,7 +43,21 @@ class RegisterWindow(QWidget):
         title.setAlignment(Qt.AlignCenter)
         layout.addWidget(title)
 
-        # Input username
+        #input Username
+        self.name_input = QLineEdit()
+        self.name_input.setPlaceholderText("Username")
+        self.name_input.setStyleSheet("""
+            QLineEdit {
+                background-color: #f0f0f0;
+                padding: 10px;
+                border-radius: 5px;
+                font-size: 14px;
+                border: 1px solid #ccc;
+            }
+        """)
+        layout.addWidget(self.name_input)
+
+        # Input Email
         self.username_input = QLineEdit()
         self.username_input.setPlaceholderText("Email")
         self.username_input.setStyleSheet("""
@@ -261,6 +275,30 @@ class ForgotPasswordWindow(QWidget):
 # Jalankan aplikasi
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+
+    # Set global stylesheet untuk QMessageBox
+    app.setStyleSheet("""
+        QMessageBox {
+            background-color: white;
+        }
+        QMessageBox QLabel {
+            color: black;
+            font-size: 14px;
+        }
+        QMessageBox QPushButton {
+            background-color: #4e54c8;
+            color: white;
+            padding: 6px 12px;
+            border: none;
+            border-radius: 5px;
+            min-width: 80px;
+        }
+        QMessageBox QPushButton:hover {
+            background-color: #5d63d8;
+        }
+    """)
+
     window = LoginWindow()
     window.show()
     sys.exit(app.exec_())
+

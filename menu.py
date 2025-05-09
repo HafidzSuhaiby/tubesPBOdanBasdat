@@ -3,7 +3,7 @@ from PyQt5.QtWidgets import (
 )
 import sys
 from database import connect_db
-from quiz import QuizWindow  # kita akan buat selanjutnya
+from quiz  import QuizWindow  # kita akan buat selanjutnya
 
 class MenuWindow(QWidget):
     def __init__(self, username, user_id):
