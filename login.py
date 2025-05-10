@@ -4,7 +4,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont, QPalette, QLinearGradient, QColor, QBrush
 import sys
-from database import register_user, login_user, reset_password
+from database import register_user, login_user, reset_password, connect_db
 from menu import MenuWindow  
 class RegisterWindow(QWidget):
     def __init__(self):
@@ -108,13 +108,16 @@ class RegisterWindow(QWidget):
         layout.addWidget(register_btn)
 
     def register(self):
-        username = self.username_input.text()
+        username = self.name_input.text()
+        email = self.username_input.text()
         password = self.password_input.text()
-        if register_user(username, password):
+        
+        if register_user(username, email, password):
             QMessageBox.information(self, "Berhasil", "Registrasi berhasil!")
             self.close()
         else:
-            QMessageBox.warning(self, "Gagal", "Username sudah digunakan.")
+            QMessageBox.warning(self, "Gagal", "Username atau email sudah digunakan.")
+
 
 
 class LoginWindow(QWidget):
@@ -156,7 +159,7 @@ class LoginWindow(QWidget):
 
         # Input username
         self.username_input = QLineEdit()
-        self.username_input.setPlaceholderText("Email")
+        self.username_input.setPlaceholderText("Username atau Email")
         self.username_input.setStyleSheet("""
             QLineEdit {
                 background-color: #f0f0f0;
@@ -226,41 +229,125 @@ class LoginWindow(QWidget):
         self.forgot_window = ForgotPasswordWindow()
         self.forgot_window.show()
 
-
     def handle_login(self):
         username = self.username_input.text()
         password = self.password_input.text()
-        user = login_user(username, password)
+        
+        if not username or not password:
+            QMessageBox.warning(self, "Peringatan", "Email dan password harus diisi.")
+            return
+        
+        user = login_user(username, password)  # Panggil dari database
+        
         if user:
+            user_id, role = user
             QMessageBox.information(self, "Sukses", f"Selamat datang, {username}!")
-            self.menu_window = MenuWindow(username, user[0])
-            self.menu_window.show()
-            self.close()
+            
+            if role == "admin":
+                from admin import AdminMenuWindow
+                self.menu_window = AdminMenuWindow(username, user_id)
+                self.menu_window.show()
+                self.close()
+            else:
+                try:
+                    from menu import MenuWindow
+                    self.menu_window = MenuWindow(username, user_id)
+                    self.menu_window.show()
+                    self.close()
+                except Exception as e:
+                    print("Gagal membuka menu:", e)
+
         else:
             QMessageBox.warning(self, "Gagal", "Username atau password salah.")
+
+
 
 class ForgotPasswordWindow(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Reset Password")
-        self.setFixedSize(300, 200)
+        self.setWindowTitle("Reset Password - Duolingo Sederhana")
+        self.setFixedSize(1200, 600)
+        self.setStyleSheet("""
+            QWidget {
+                background: qlineargradient(
+                    x1: 0, y1: 0, x2: 1, y2: 1,
+                    stop: 0 #4e54c8,
+                    stop: 1 #8f94fb
+                );
+            }
+        """)
 
-        layout = QVBoxLayout()
+        # Card putih di tengah
+        self.card = QFrame(self)
+        self.card.setFixedSize(300, 400)
+        self.card.setStyleSheet("""
+            QFrame {
+                background-color: white;
+                border-radius: 10px;
+                padding: 20px;
+            }
+        """)
+        self.card.move((self.width() - self.card.width()) // 2, (self.height() - self.card.height()) // 2)
 
+        layout = QVBoxLayout(self.card)
+        layout.setSpacing(15)
+        layout.setAlignment(Qt.AlignTop)
+
+        # Judul
+        title = QLabel("Reset Password", self.card)
+        title.setFont(QFont("Arial", 18, QFont.Bold))
+        title.setAlignment(Qt.AlignCenter)
+        layout.addWidget(title)
+
+        # Input Username
         self.username_input = QLineEdit()
-        self.username_input.setPlaceholderText("Username")
+        self.username_input.setPlaceholderText("Email")
+        self.username_input.setStyleSheet("""
+            QLineEdit {
+                background-color: #f0f0f0;
+                padding: 10px;
+                border-radius: 5px;
+                font-size: 14px;
+                border: 1px solid #ccc;
+            }
+        """)
         layout.addWidget(self.username_input)
 
+        # Input Password Baru
         self.new_password_input = QLineEdit()
         self.new_password_input.setPlaceholderText("Password Baru")
         self.new_password_input.setEchoMode(QLineEdit.Password)
+        self.new_password_input.setStyleSheet("""
+            QLineEdit {
+                background-color: #f0f0f0;
+                padding: 10px;
+                border-radius: 5px;
+                font-size: 14px;
+                border: 1px solid #ccc;
+            }
+        """)
         layout.addWidget(self.new_password_input)
 
+        # Tombol Reset Password
         reset_btn = QPushButton("Reset Password")
+        reset_btn.setStyleSheet("""
+            QPushButton {
+                background-color: qlineargradient(
+                    x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #4e54c8, stop:1 #8f94fb
+                );
+                color: white;
+                padding: 10px;
+                font-size: 14px;
+                border: none;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: #5d63d8;
+            }
+        """)
         reset_btn.clicked.connect(self.reset_password)
         layout.addWidget(reset_btn)
-
-        self.setLayout(layout)
 
     def reset_password(self):
         username = self.username_input.text()
