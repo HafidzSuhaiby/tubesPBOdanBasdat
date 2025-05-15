@@ -230,11 +230,11 @@ class ChapterWindow(QWidget):
     def load_chapters(self):
         chapters = get_chapters_by_lesson(self.lesson_id)
         self.list.clear()
-
+        
         try:
             db = connect_db()
             cursor = db.cursor()
-
+            
             for i, (chap_id, chap_title) in enumerate(chapters):
                 # Hitung total soal
                 cursor.execute("SELECT COUNT(*) FROM questions WHERE chapter_id = %s", (chap_id,))
@@ -244,16 +244,17 @@ class ChapterWindow(QWidget):
                 cursor.execute("SELECT COUNT(*) FROM user_answers WHERE user_id = %s AND chapter_id = %s", (self.user_id, chap_id))
                 answered = cursor.fetchone()[0]
 
-                # Kunci bab ke-2 dan seterusnya jika sebelumnya belum selesai
                 locked = False
+
                 if i > 0:
                     prev_chap_id = chapters[i - 1][0]
                     cursor.execute("SELECT completed FROM user_progress WHERE user_id = %s AND chapter_id = %s", (self.user_id, prev_chap_id))
-                    row = cursor.fetchone()
-                    if not row or not row[0]:
+                    progress = cursor.fetchone()
+                    # Jika progress tidak ditemukan atau belum completed
+                    if not progress or not progress[0]:
                         locked = True
 
-            # Tambahkan item ke list
+                # Tambahkan item ke list
                 item_text = f"{chap_title} - {answered}/{total}" + (" 🔒" if locked else "")
                 item = QListWidgetItem(item_text)
                 item.setData(Qt.UserRole, chap_id)
@@ -262,7 +263,6 @@ class ChapterWindow(QWidget):
                 self.list.addItem(item)
 
         except Exception as e:
-            print("[ERROR] Gagal load bab:", e)
             from PyQt5.QtWidgets import QMessageBox
             QMessageBox.critical(self, "ERROR", f"Gagal load bab:\n{e}")
         finally:
@@ -270,11 +270,16 @@ class ChapterWindow(QWidget):
 
 
 
+
     def start_quiz(self, item):
-        chapter_id = item.data(Qt.UserRole)  # Ambil ID bab dari item
-        chapter_title = item.text().split(" - ")[0]  # Ambil nama bab dari teks
+        if not item.flags() & Qt.ItemIsEnabled:
+            return  # Jangan lakukan apapun kalau item terkunci
+
+        chapter_id = item.data(Qt.UserRole)
+        chapter_title = item.text().split(" - ")[0]
         if chapter_id:
             self.quiz_window = QuizWindow(self.username, self.user_id, chapter_id, chapter_title, is_chapter=True)
             self.quiz_window.show()
             self.close()
+
 

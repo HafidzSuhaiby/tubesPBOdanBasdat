@@ -123,19 +123,17 @@ class QuizWindow(QWidget):
         # Simpan jawaban ke tabel user_answers
         db = connect_db()
         cursor = db.cursor()
-        cursor.execute("""
-            INSERT INTO user_answers (user_id, chapter_id, question, answer, correct)
-            VALUES (%s, %s, %s, %s, %s)
-        """, (
-            self.user_id,
-            self.lesson_or_chapter_id,
-            self.question_label.text(),
-            selected_option,
-            is_correct
-        ))
+        cursor.execute("""INSERT INTO user_answers (user_id, chapter_id, question, answer, correct) VALUES (%s, %s, %s, %s, %s)
+        ON DUPLICATE KEY UPDATE answer = VALUES(answer), correct = VALUES(correct)""", 
+        (
+        self.user_id,
+        self.lesson_or_chapter_id,
+        self.question_label.text(),
+        selected_option,
+        is_correct ))
+
         db.commit()
         db.close()
-
         self.current_question_index += 1
         if self.current_question_index >= len(self.questions):
             db = connect_db()
