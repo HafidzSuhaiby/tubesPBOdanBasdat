@@ -64,14 +64,36 @@ def add_lesson(title, desc):
     finally:
         conn.close()
 
-def add_question(question, correct_answer, lesson_id):
+def get_chapters_by_lesson(lesson_id):
+    conn = connect_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, title FROM chapters WHERE lesson_id = %s", (lesson_id,))
+    chapters = cursor.fetchall()
+    conn.close()
+    return chapters
+
+def add_chapter(title, lesson_id):
     try:
         conn = connect_db()
         cursor = conn.cursor()
-        cursor.execute(
-            "INSERT INTO questions (question_text, correct_answer, lesson_id) VALUES (%s, %s, %s)",
-            (question, correct_answer, lesson_id)
-        )
+        cursor.execute("INSERT INTO chapters (title, lesson_id) VALUES (%s, %s)", (title, lesson_id))
+        conn.commit()
+        return True
+    except Exception as e:
+        print("Error tambah bab:", e)
+        return False
+    finally:
+        conn.close()
+
+def add_question(question, option_a, option_b, option_c, option_d, correct_option, chapter_id):
+    try:
+        conn = connect_db()
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO questions 
+            (question, option_a, option_b, option_c, option_d, correct_option, chapter_id)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+        """, (question, option_a, option_b, option_c, option_d, correct_option, chapter_id))
         conn.commit()
         return True
     except Exception as e:
@@ -79,3 +101,4 @@ def add_question(question, correct_answer, lesson_id):
         return False
     finally:
         conn.close()
+

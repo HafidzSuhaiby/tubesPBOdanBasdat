@@ -6,11 +6,59 @@ from PyQt5.QtGui import QFont, QPalette, QLinearGradient, QColor, QBrush
 import sys
 from database import register_user, login_user, reset_password, connect_db
 from menu import MenuWindow  
+from PyQt5.QtWidgets import QApplication, QWidget, QLabel
+from PyQt5.QtCore import Qt, QTimer, QPropertyAnimation, QPoint
+from PyQt5.QtGui import QFont
+
+
+class SplashScreenWindow(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Bahasaku - Splash")
+        self.setFixedSize(380, 600)
+        self.setStyleSheet("""
+            QWidget {
+                background: qlineargradient(
+                    x1: 0, y1: 0, x2: 1, y2: 1,
+                    stop: 0 #4e54c8,
+                    stop: 1 #8f94fb
+                );
+            }
+        """)
+
+        self.label = QLabel("", self)
+        self.label.setFont(QFont("Arial", 28, QFont.Bold))
+        self.label.setAlignment(Qt.AlignCenter)
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(self.label)
+
+        self.full_text = "Bahasaku"
+        self.current_index = 0
+
+        self.timer = QTimer()
+        self.timer.timeout.connect(self.update_text)
+        self.timer.start(80)  # kecepatan animasi
+
+    def update_text(self):
+        if self.current_index < len(self.full_text):
+            self.label.setText(self.label.text() + self.full_text[self.current_index])
+            self.current_index += 1
+        else:
+            self.timer.stop()
+            QTimer.singleShot(1000, self.show_login)  # setelah selesai, tunggu 1 detik lalu buka login
+
+    def show_login(self):
+        self.login_window = LoginWindow()
+        self.login_window.show()
+        self.close()
+
+
 class RegisterWindow(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Register - Duolingo Sederhana")
-        self.setFixedSize(1200, 600)
+        self.setFixedSize(380, 600)
         self.setStyleSheet("""
             QWidget {
                 background: qlineargradient(
@@ -124,7 +172,7 @@ class LoginWindow(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Login - Duolingo Sederhana")
-        self.setFixedSize(1200, 600)
+        self.setFixedSize(380, 600)
         self.setStyleSheet("""
             QWidget {
                 background: qlineargradient(
@@ -266,7 +314,7 @@ class ForgotPasswordWindow(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Reset Password - Duolingo Sederhana")
-        self.setFixedSize(1200, 600)
+        self.setFixedSize(380, 600)
         self.setStyleSheet("""
             QWidget {
                 background: qlineargradient(
@@ -362,7 +410,8 @@ class ForgotPasswordWindow(QWidget):
 # Jalankan aplikasi
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    window = LoginWindow()
-    window.show()
+    splash = SplashScreenWindow()
+    splash.show()
     sys.exit(app.exec_())
+
 

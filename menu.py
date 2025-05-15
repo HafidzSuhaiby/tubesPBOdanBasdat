@@ -1,27 +1,137 @@
 from PyQt5.QtWidgets import (
-    QWidget, QLabel, QVBoxLayout, QListWidget, QApplication, QMessageBox
+    QWidget, QLabel, QVBoxLayout, QListWidget, QListWidgetItem,
+    QApplication, QHBoxLayout, QDialog, QPushButton
 )
+from PyQt5.QtGui import QPixmap, QCursor
+from PyQt5.QtCore import Qt
 import sys
 from database import connect_db
-from quiz  import QuizWindow  # kita akan buat selanjutnya
+from lessons import ChapterWindow
 
+# === Dialog Profil ===
+class ProfileDialog(QDialog):
+    def __init__(self, parent, username, email):
+        super().__init__(parent)
+        self.setWindowTitle("Profil Pengguna")
+        self.setFixedSize(300, 200)
+        self.username = username
+        self.email = email
+        self.parent = parent
+
+        layout = QVBoxLayout()
+
+        layout.addWidget(QLabel(f"Username: {username}"))
+        layout.addWidget(QLabel(f"Email: {email}"))
+
+        btn_logout = QPushButton("Logout")
+        btn_logout.clicked.connect(self.handle_logout)
+        layout.addWidget(btn_logout)
+
+        self.setLayout(layout)
+
+    def handle_logout(self):
+        from login import LoginWindow  # Import di sini untuk menghindari circular import
+        self.login_window = LoginWindow()
+        self.login_window.show()
+        self.parent.close()  # Tutup jendela MenuWindow
+        self.close()         # Tutup dialog profil
+
+
+# === MenuWindow ===
 class MenuWindow(QWidget):
-    def __init__(self, username, user_id):
+    def __init__(self, username, user_id, email="user@example.com"):
         super().__init__()
         self.setWindowTitle("Pilih Pelajaran")
         self.username = username
         self.user_id = user_id
+        self.email = email
+        self.setFixedSize(350, 600)
 
-        layout = QVBoxLayout()
+        self.setStyleSheet("""
+    QWidget {
+        background: qlineargradient(
+            x1: 0, y1: 0, x2: 1, y2: 1,
+            stop: 0 #4e54c8,
+            stop: 1 #8f94fb
+        );
+        font-family: Arial;
+    }
 
-        self.label = QLabel(f"Halo, {username}! Silakan pilih pelajaran:")
-        layout.addWidget(self.label)
+    QLabel {
+        font-size: 10px;
+        font-weight: bold;
+        color: #222;
+    }
+
+    QListWidget {
+        font-size: 18px;
+        padding: 10px;
+        border: none;
+        background: transparent;
+    }
+    QListWidget::item:hover {
+        background-color: #5d63d8;
+    }
+    QListWidget::item {
+        background: #ffffff;
+        margin: 4px;
+        padding: 12px;
+        border-radius: 10px;
+        border: 1px solid #ddd;
+        color: #222;
+    }
+
+    QListWidget::item:selected {
+        background: #5c63d8;
+        color: white;
+        font-weight: bold;
+        border: none;
+    }
+
+""")
+
+
+        main_layout = QVBoxLayout()
+
+        # Bar atas (gambar + label)
+        top_bar = QHBoxLayout()
+        self.profile_pic = QLabel()
+        pixmap = QPixmap("profil.png").scaled(30, 30, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        self.profile_pic.setPixmap(pixmap)
+        self.profile_pic.setCursor(QCursor(Qt.PointingHandCursor))
+        self.profile_pic.setStyleSheet("background: transparent;")
+        self.profile_pic.mousePressEvent = self.show_user_info
+        self.halo_label = QLabel(f"Halo, {username}")
+        self.halo_label.setStyleSheet("font-size: 13px; margin-left: 5px; background: transparent;")
+        top_bar.addWidget(self.profile_pic)
+        top_bar.addWidget(self.halo_label)
+        top_bar.addStretch()  
+        
+        main_layout.addLayout(top_bar)
+
+        self.pilih_label = QLabel("Silakan pilih pelajaran:")
+        self.pilih_label.setAlignment(Qt.AlignCenter)
+        self.pilih_label.setStyleSheet("font-size: 15px; margin-top: 30px; background: transparent;")
+        main_layout.addWidget(self.pilih_label)
+
+
+        main_layout.addLayout(top_bar)
 
         self.lesson_list = QListWidget()
+        self.lesson_list.setSpacing(8)
+        self.lesson_list.setFocusPolicy(Qt.NoFocus)
         self.lesson_list.itemClicked.connect(self.start_quiz)
-        layout.addWidget(self.lesson_list)
+        lesson_container = QHBoxLayout()
+        lesson_container.addStretch()  # Spacer kiri
+        self.lesson_list.setFixedWidth(250)  # Atur lebar item daftar pelajaran
+        lesson_container.addWidget(self.lesson_list)
+        lesson_container.addStretch()  # Spacer kanan
+        main_layout.addLayout(lesson_container)
 
-        self.setLayout(layout)
+        
+
+
+        self.setLayout(main_layout)
         self.load_lessons()
 
     def load_lessons(self):
@@ -31,21 +141,41 @@ class MenuWindow(QWidget):
         lessons = cursor.fetchall()
         db.close()
 
-        self.lesson_map = {}  # simpan id pelajaran
+        self.lesson_map = {}
         self.lesson_list.clear()
         for lesson in lessons:
-            self.lesson_map[lesson[1]] = lesson[0]
-            self.lesson_list.addItem(lesson[1])
+            title = lesson[1]
+            self.lesson_map[title] = lesson[0]
+            item = QListWidgetItem(title)
+            item.setTextAlignment(Qt.AlignCenter)
+            self.lesson_list.addItem(item)
 
     def start_quiz(self, item):
-        title = item.text()
-        lesson_id = self.lesson_map[title]
-        self.quiz_window = QuizWindow(self.username, self.user_id, lesson_id, title)
-        self.quiz_window.show()
+        try:
+            title = item.text()
+            lesson_id = self.lesson_map[title]
+            print(f"[DEBUG] Buka bab untuk: {title} (lesson_id={lesson_id})")
+            self.chapter_window = ChapterWindow(self.username, self.user_id, lesson_id, title)
+            self.chapter_window.show()
+            self.close()
+        except Exception as e:
+            from PyQt5.QtWidgets import QMessageBox
+            QMessageBox.critical(self, "ERROR", f"Gagal buka ChapterWindow:\n{e}")
+
+
+    def show_user_info(self, event):
+        dialog = ProfileDialog(self, self.username, self.email)
+        dialog.exec_()
+
+    def logout_user(self):
+        from login import LoginWindow  # Pastikan login.py bisa diimport tanpa masalah
+        self.login_window = LoginWindow()  # Membuat instance LoginWindow
+        self.login_window.show()  # Menampilkan LoginWindow
+        self.close()  # Menu 
 
 # Untuk pengujian langsung
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    window = MenuWindow("testuser", 1)
+    window = MenuWindow("testuser", 1, "testuser@example.com")
     window.show()
     sys.exit(app.exec_())
