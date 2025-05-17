@@ -205,7 +205,72 @@ class ChapterManager(QWidget):
                 QMessageBox.warning(self, "Gagal", "Gagal menambahkan bab.")
 
 
-class ChapterWindow(QWidget):
+
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QListWidget, QListWidgetItem, QMessageBox, QFrame
+from PyQt5.QtCore import Qt
+from database import connect_db, get_chapters_by_lesson
+
+class StyledWidget(QWidget):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.setStyleSheet("""
+            QWidget {
+                background: qlineargradient(
+                    x1: 0, y1: 0, x2: 1, y2: 1,
+                    stop: 0 #4e54c8,
+                    stop: 1 #8f94fb
+                );
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            }
+
+            QLabel#titleLabel {
+                font-size: 22px;
+                font-weight: bold;
+                color: #333;
+                margin-bottom: 10px;
+            }
+
+            QLabel#subtitleLabel {
+                font-size: 16px;
+                color: #555;
+                margin-bottom: 20px;
+            }
+
+            QListWidget#chapterList {
+                border: none;
+                background: transparent;
+            }
+
+            QListWidget::item {
+                background: #ffffff;
+                border: 2px solid #a2b3f5;
+                border-radius: 12px;
+                padding: 12px 16px;
+                margin: 8px;
+                font-size: 15px;
+                color: #333;
+            }
+
+            QListWidget::item:hover {
+                background: #e3e8fd;
+            }
+
+            QListWidget::item:disabled {
+                background: #f0f0f0;
+                color: #999;
+                border: 2px dashed #ccc;
+            }
+
+            QFrame#card {
+                background: white;
+                border-radius: 20px;
+                padding: 30px;
+                max-width: 320px;
+                box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+            }
+        """)
+
+class ChapterWindow(StyledWidget):
     def __init__(self, username, user_id, lesson_id, lesson_title):
         super().__init__()
         self.username = username
@@ -214,35 +279,88 @@ class ChapterWindow(QWidget):
         self.lesson_title = lesson_title
 
         self.setWindowTitle(f"{lesson_title} - Pilih BAB")
-        self.setFixedSize(350, 500)
+        self.setFixedSize(400, 550)  # Lebih besar sedikit supaya judul muat
 
         layout = QVBoxLayout()
+        layout.setContentsMargins(24, 24, 24, 24)  # Margin lebih luas
+        layout.setSpacing(24)
+
         title = QLabel(f"Pelajaran: {lesson_title}\nPilih Bab:")
+        title.setWordWrap(True)
+        title.setStyleSheet("""
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-size: 26px;
+            font-weight: 700;
+            color: #FFFFFF; /* ungu gelap */
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.2);
+            margin-bottom: 16px;
+        """)
         layout.addWidget(title)
 
         self.list = QListWidget()
+        self.list.setStyleSheet("""
+    QListWidget {
+        background: transparent;
+        border: none;
+    }
+    QListWidget::item {
+        background: #f0f4ff;
+        border: 2px solid #a2b3f5;
+        border-radius: 16px;
+        padding: 18px 24px;
+        margin: 10px 0;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        font-size: 19px;
+        font-weight: 700;
+        color: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                              stop:0 #5d54a4, stop:1 #8e7cc3);
+        text-shadow: 1px 1px 2px rgba(93, 84, 164, 0.7);
+        transition: background-color 0.25s ease, border-color 0.25s ease, color 0.3s ease;
+    }
+    QListWidget::item:hover:!disabled {
+        background: #d7defa;
+        border-color: #5d54a4;
+        color: #3c2e8e;
+        cursor: pointer;
+        text-shadow: 2px 2px 4px rgba(60, 46, 142, 0.9);
+    }
+    QListWidget::item:selected {
+        background: #5d54a4;
+        color: white;
+        border-color: #4b3b7a;
+        text-shadow: none;
+    }
+    QListWidget::item:disabled {
+        color: #aaa;
+        border-style: dashed;
+        background: #f7f8fc;
+        cursor: not-allowed;
+        text-shadow: none;
+    }
+""")
+
         self.list.itemClicked.connect(self.start_quiz)
         layout.addWidget(self.list)
 
         self.setLayout(layout)
+
         self.load_chapters()
 
     def load_chapters(self):
         chapters = get_chapters_by_lesson(self.lesson_id)
         self.list.clear()
-        
+
         try:
             db = connect_db()
             cursor = db.cursor()
-            
+
             for i, (chap_id, chap_title) in enumerate(chapters):
-                # Hitung total soal
                 cursor.execute("SELECT COUNT(*) FROM questions WHERE chapter_id = %s", (chap_id,))
                 total = cursor.fetchone()[0]
 
-                # Hitung jumlah soal yang sudah dijawab
-                cursor.execute("SELECT COUNT(*) FROM user_answers WHERE user_id = %s AND chapter_id = %s", (self.user_id, chap_id))
+                cursor.execute("SELECT COUNT(*) FROM user_answers WHERE user_id = %s AND chapter_id = %s AND correct = TRUE", (self.user_id, chap_id))
                 answered = cursor.fetchone()[0]
+
 
                 locked = False
 
@@ -250,11 +368,9 @@ class ChapterWindow(QWidget):
                     prev_chap_id = chapters[i - 1][0]
                     cursor.execute("SELECT completed FROM user_progress WHERE user_id = %s AND chapter_id = %s", (self.user_id, prev_chap_id))
                     progress = cursor.fetchone()
-                    # Jika progress tidak ditemukan atau belum completed
                     if not progress or not progress[0]:
                         locked = True
 
-                # Tambahkan item ke list
                 item_text = f"{chap_title} - {answered}/{total}" + (" 🔒" if locked else "")
                 item = QListWidgetItem(item_text)
                 item.setData(Qt.UserRole, chap_id)
@@ -268,18 +384,24 @@ class ChapterWindow(QWidget):
         finally:
             db.close()
 
-
-
-
     def start_quiz(self, item):
         if not item.flags() & Qt.ItemIsEnabled:
-            return  # Jangan lakukan apapun kalau item terkunci
+            return
 
         chapter_id = item.data(Qt.UserRole)
         chapter_title = item.text().split(" - ")[0]
         if chapter_id:
-            self.quiz_window = QuizWindow(self.username, self.user_id, chapter_id, chapter_title, is_chapter=True)
+            from quiz import QuizWindow
+            self.quiz_window = QuizWindow(
+                self.username, self.user_id, chapter_id, chapter_title,
+                is_chapter=True,
+                on_finish=self.return_to_menu
+            )
             self.quiz_window.show()
             self.close()
 
+    def return_to_menu(self):
+        from menu import MenuWindow
+        self.menu_window = MenuWindow(self.username, self.user_id)
+        self.menu_window.show()
 

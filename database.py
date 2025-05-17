@@ -102,3 +102,18 @@ def add_question(question, option_a, option_b, option_c, option_d, correct_optio
     finally:
         conn.close()
 
+
+
+
+def get_lessons():
+    try:
+        conn = connect_db()
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, title FROM lessons")
+        results = cursor.fetchall()
+        conn.close()
+        return results
+    except Exception as e:
+        print("Error get_lessons:", e)
+        return []
+

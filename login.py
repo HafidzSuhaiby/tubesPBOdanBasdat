@@ -15,7 +15,7 @@ class SplashScreenWindow(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Bahasaku - Splash")
-        self.setFixedSize(380, 600)
+        self.setFixedSize(600, 650)
         self.setStyleSheet("""
             QWidget {
                 background: qlineargradient(
@@ -58,7 +58,7 @@ class RegisterWindow(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Register - Duolingo Sederhana")
-        self.setFixedSize(380, 600)
+        self.setFixedSize(720, 800)
         self.setStyleSheet("""
             QWidget {
                 background: qlineargradient(
@@ -172,7 +172,7 @@ class LoginWindow(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Login - Duolingo Sederhana")
-        self.setFixedSize(380, 600)
+        self.setFixedSize(720, 800)
         self.setStyleSheet("""
             QWidget {
                 background: qlineargradient(
@@ -314,7 +314,7 @@ class ForgotPasswordWindow(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Reset Password - Duolingo Sederhana")
-        self.setFixedSize(380, 600)
+        self.setFixedSize(720, 800)
         self.setStyleSheet("""
             QWidget {
                 background: qlineargradient(
