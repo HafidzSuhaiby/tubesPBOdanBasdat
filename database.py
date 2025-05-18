@@ -1,5 +1,4 @@
 import mysql.connector
-import sqlite3
 
 # Fungsi untuk membuat koneksi ke database
 def connect_db():

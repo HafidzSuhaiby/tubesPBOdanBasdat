@@ -81,6 +81,7 @@ class QuizWindow(StyledWidget):
         self.is_chapter = is_chapter
         self.lesson_title = title
         self.on_finish = on_finish
+        self.jawaban_benar = []
 
         self.layout = QVBoxLayout()
         self.layout.setAlignment(Qt.AlignTop | Qt.AlignHCenter)
@@ -204,6 +205,7 @@ class QuizWindow(StyledWidget):
         is_correct = (selected_option == correct_option)
         return selected_option, is_correct
 
+
     def next_question(self):
         selected_option, is_correct = self.save_answer()
 
@@ -211,33 +213,41 @@ class QuizWindow(StyledWidget):
             QMessageBox.warning(self, "Peringatan", "Pilih salah satu jawaban terlebih dahulu.")
             return
 
-        if not is_correct:
-            self.lives -= 1
-            db = connect_db()
-            cursor = db.cursor()
-            cursor.execute("UPDATE users SET lives = %s WHERE id = %s", (self.lives, self.user_id))
-            db.commit()
-            db.close()
-            if self.lives == 0:
-                QMessageBox.warning(self, "Game Over", "Nyawa Anda habis. Coba lagi besok.")
-                self.close()
-                return
-        else:
+        # Simpan status jawaban benar/salah
+        self.jawaban_benar.append(is_correct)
+
+        if is_correct:
             self.score += 1
 
+        # Simpan jawaban ke database
         db = connect_db()
         cursor = db.cursor()
-        cursor.execute("""INSERT INTO user_answers (user_id, chapter_id, question, answer, correct) VALUES (%s, %s, %s, %s, %s)
-        ON DUPLICATE KEY UPDATE answer = VALUES(answer), correct = VALUES(correct)""",
-                       (self.user_id, self.lesson_or_chapter_id, self.question_label.text(), selected_option, is_correct))
+        cursor.execute("""
+            INSERT INTO user_answers (user_id, chapter_id, question, answer, correct) 
+            VALUES (%s, %s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE answer = VALUES(answer), correct = VALUES(correct)
+        """, (self.user_id, self.lesson_or_chapter_id, self.question_label.text(), selected_option, is_correct))
         db.commit()
         db.close()
 
+        # Jika ini soal terakhir
         if self.current_question_index == len(self.questions) - 1:
-            # Cek jumlah soal
+
+            # Jika ada jawaban salah, kurangi nyawa 1x
+            if False in self.jawaban_benar:
+                self.lives -= 1
+                db = connect_db()
+                cursor = db.cursor()
+                cursor.execute("UPDATE users SET lives = %s WHERE id = %s", (self.lives, self.user_id))
+                db.commit()
+                db.close()
+                if self.lives == 0:
+                    QMessageBox.warning(self, "Game Over", "Nyawa Anda habis. Coba lagi besok.")
+                    self.close()
+                    return
+
             total_questions = len(self.questions)
 
-            # Jika skor sama dengan total soal, anggap selesai
             if self.score == total_questions:
                 db = connect_db()
                 cursor = db.cursor()
@@ -252,15 +262,15 @@ class QuizWindow(StyledWidget):
             else:
                 QMessageBox.warning(self, "Belum Lulus", f"Skor Anda: {self.score}/{total_questions}\nAnda harus menjawab semua soal dengan benar untuk menyelesaikan BAB.")
 
-    
             self.close()
             if self.on_finish:
                 self.on_finish()
             return
 
-
+        # Jika belum soal terakhir, lanjutkan
         self.current_question_index += 1
         self.display_question()
+
 
     def prev_question(self):
         if self.current_question_index == 0:
