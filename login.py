@@ -30,7 +30,7 @@ class SplashScreenWindow(QWidget):
 
         # Tambahkan QLabel untuk gambar
         self.image_label = QLabel(self)
-        self.image_label.setPixmap(QPixmap("logo.png").scaled(200, 200, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        self.image_label.setPixmap(QPixmap("logo2.png").scaled(200, 200, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         self.image_label.setAlignment(Qt.AlignCenter)
         self.image_label.setFixedSize(200, 200)
         self.image_label.setAttribute(Qt.WA_TranslucentBackground)
@@ -45,6 +45,15 @@ class SplashScreenWindow(QWidget):
         self.animation.setEndValue(QPoint((self.width() - 200) // 2, (self.height() - 200) // 2))
         self.animation.finished.connect(self.finish_animation)
         self.animation.start()
+
+    def finish_animation(self):
+        QTimer.singleShot(1000, self.show_login)
+
+    def show_login(self):
+        self.login_window = LoginWindow()
+        self.login_window.show()
+        self.close()
+
 
     def finish_animation(self):
         QTimer.singleShot(1000, self.show_login)

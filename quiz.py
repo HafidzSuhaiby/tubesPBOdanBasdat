@@ -90,6 +90,7 @@ class QuizWindow(StyledWidget):
         self.current_question_index = 0
         self.score = 0
         self.questions = []
+        self.user_answers = {}  # <-- untuk menyimpan jawaban user per soal
 
         self.lives = self.check_and_reset_lives()
         if self.lives <= 0:
@@ -184,9 +185,17 @@ class QuizWindow(StyledWidget):
 
         self.question_label.setText(question_text)
 
+        self.button_group.setExclusive(False)
+        for rb in self.radio_buttons:
+            rb.setChecked(False)
+        self.button_group.setExclusive(True)
+
         for rb, text in zip(self.radio_buttons, [a, b, c, d]):
             rb.setText(text)
-            rb.setChecked(False)
+
+        if self.current_question_index in self.user_answers:
+            selected_id = self.user_answers[self.current_question_index]
+            self.radio_buttons[selected_id].setChecked(True)
 
         self.prev_button.setEnabled(self.current_question_index > 0)
         if self.current_question_index == len(self.questions) - 1:
@@ -199,12 +208,11 @@ class QuizWindow(StyledWidget):
         if selected_id == -1:
             return None, None
 
+        self.user_answers[self.current_question_index] = selected_id
         selected_option = "ABCD"[selected_id]
-        question_data = self.questions[self.current_question_index]
-        correct_option = question_data[5]
+        correct_option = self.questions[self.current_question_index][5]
         is_correct = (selected_option == correct_option)
         return selected_option, is_correct
-
 
     def next_question(self):
         selected_option, is_correct = self.save_answer()
@@ -213,13 +221,14 @@ class QuizWindow(StyledWidget):
             QMessageBox.warning(self, "Peringatan", "Pilih salah satu jawaban terlebih dahulu.")
             return
 
-        # Simpan status jawaban benar/salah
-        self.jawaban_benar.append(is_correct)
+        if self.current_question_index >= len(self.jawaban_benar):
+            self.jawaban_benar.append(is_correct)
+        else:
+            self.jawaban_benar[self.current_question_index] = is_correct
 
         if is_correct:
             self.score += 1
 
-        # Simpan jawaban ke database
         db = connect_db()
         cursor = db.cursor()
         cursor.execute("""
@@ -230,10 +239,7 @@ class QuizWindow(StyledWidget):
         db.commit()
         db.close()
 
-        # Jika ini soal terakhir
         if self.current_question_index == len(self.questions) - 1:
-
-            # Jika ada jawaban salah, kurangi nyawa 1x
             if False in self.jawaban_benar:
                 self.lives -= 1
                 db = connect_db()
@@ -267,10 +273,8 @@ class QuizWindow(StyledWidget):
                 self.on_finish()
             return
 
-        # Jika belum soal terakhir, lanjutkan
         self.current_question_index += 1
         self.display_question()
-
 
     def prev_question(self):
         if self.current_question_index == 0:
