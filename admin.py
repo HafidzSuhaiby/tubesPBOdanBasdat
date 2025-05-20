@@ -5,6 +5,9 @@ from database import add_lesson, add_chapter, add_question
 from PyQt5.QtWidgets import QMessageBox
 from lessons import LessonManager, QuestionManager, ChapterManager
 from database import  connect_db, get_lessons, get_chapters_by_lesson
+from api import api_add_lesson, api_get_lessons, api_add_chapter, api_add_question
+
+
 class AdminMenuWindow(QWidget):
     def __init__(self, username, user_id):
         super().__init__()
@@ -307,11 +310,15 @@ class ChapterManager(QWidget):
             QMessageBox.warning(self, "Peringatan", "Pilih pelajaran terlebih dahulu.")
             return
 
-        if add_chapter(chapter_title, lesson_id):
-            QMessageBox.information(self, "Berhasil", f"BAB '{chapter_title}' berhasil ditambahkan.")
-            self.close()  # Kembali ke admin panel (karena jendela ini ditutup)
+        result = api_add_chapter(chapter_title, lesson_id)
+
+        if "error" in result:
+            QMessageBox.critical(self, "Error", result["error"])
+        elif result["status"] == "success":
+            QMessageBox.information(self, "Berhasil", result["message"])
+            self.close()
         else:
-            QMessageBox.warning(self, "Gagal", "Gagal menyimpan BAB.")
+            QMessageBox.warning(self, "Gagal", result.get("message", "Terjadi kesalahan."))
 
 
 
@@ -493,17 +500,28 @@ class QuestionManager(QWidget):
         chapter_title = self.chapter_combo.currentText()
         chapter_id = self.chapter_map.get(chapter_title)
 
-        if not question or not option_a or not option_b or not option_c or not option_d:
+        if not all([question, option_a, option_b, option_c, option_d]):
             QMessageBox.warning(self, "Peringatan", "Semua field pilihan harus diisi.")
             return
+
         if chapter_id is None:
             QMessageBox.warning(self, "Peringatan", "Pilih BAB terlebih dahulu.")
             return
 
-        if add_question(question, option_a, option_b, option_c, option_d, correct_option, chapter_id):
-            QMessageBox.information(self, "Sukses", "Soal berhasil disimpan.")
+        result = api_add_question({
+            "question": question,
+            "a": option_a,
+            "b": option_b,
+            "c": option_c,
+            "d": option_d,
+            "correct": correct_option,
+            "chapter_id": chapter_id
+        })
+
+        if "error" in result:
+            QMessageBox.critical(self, "Error", result["error"])
+        elif result["status"] == "success":
+            QMessageBox.information(self, "Sukses", result["message"])
             self.close()
-            if self.parent_admin_window:
-                self.parent_admin_window.show()
         else:
-            QMessageBox.warning(self, "Gagal", "Terjadi kesalahan saat menyimpan soal.")
+            QMessageBox.warning(self, "Gagal", result.get("message", "Terjadi kesalahan."))

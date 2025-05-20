@@ -11,6 +11,8 @@ from PyQt5.QtWidgets import QApplication, QWidget, QLabel
 from PyQt5.QtCore import Qt, QTimer, QPropertyAnimation, QPoint
 from PyQt5.QtGui import QFont
 from users import Admin, SiswaBiasa, SiswaSuper
+import requests
+from api import api_login
 
 
 class SplashScreenWindow(QWidget):
@@ -292,44 +294,32 @@ class LoginWindow(QWidget):
         username = self.username_input.text()
         password = self.password_input.text()
 
-        result = login_user(username, password)  # Misal return (user_id, role)
+        result = api_login(username, password)
 
-        if not result:
-            QMessageBox.warning(self, "Login Gagal", "Username atau password salah.")
+        if "error" in result:
+            QMessageBox.critical(self, "Error", f"Gagal koneksi ke server:\n{result['error']}")
             return
 
-        user_id, role = result
-
-        # Buat objek sesuai role
-        try:
-            if role == "admin":
-                user_obj = Admin(user_id, username)
-            elif role == "siswa_super":
-                user_obj = SiswaSuper(user_id, username)
-            else:
-                user_obj = SiswaBiasa(user_id, username)
-        except ValueError as e:
-            QMessageBox.warning(self, "Error", f"Invalid user data: {e}")
+        if result["status"] == "fail":
+            QMessageBox.warning(self, "Login Gagal", result.get("message", "Username/password salah"))
             return
 
+        user_id = result["id"]
+        role = result["role"]
 
-        QMessageBox.information(self, "Sukses", f"Selamat datang, {user_obj.username}!")
+        if role == "admin":
+            user_obj = Admin(user_id, username)
+        elif role == "siswa_super":
+            user_obj = SiswaSuper(user_id, username)
+        else:
+            user_obj = SiswaBiasa(user_id, username)
 
-        try:
-            if isinstance(user_obj, Admin):
-                from admin import AdminMenuWindow
-                # Pastikan argumen sesuai constructor AdminMenuWindow
-                self.menu_window = AdminMenuWindow(user_obj.username, user_obj.user_id)
-            else:
-                from menu import MenuWindow
-                self.menu_window = MenuWindow(user_obj.username, user_obj.user_id)
-        
-            self.menu_window.show()
-            self.close()
+        QMessageBox.information(self, "Login Sukses", f"Selamat datang {username}")
+        from menu import MenuWindow
+        self.menu_window = MenuWindow(user_obj.username, user_obj.user_id)
+        self.menu_window.show()
+        self.close()
 
-        except Exception as e:
-            print("Gagal membuka menu:", e)
-            QMessageBox.warning(self, "Error", f"Gagal membuka menu: {e}")
 
 
 class ForgotPasswordWindow(QWidget):

@@ -5,6 +5,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt
 from database import connect_db
 from datetime import date
+from api import api_submit_answer, api_mark_chapter_complete
 
 
 class StyledWidget(QWidget):
@@ -212,6 +213,19 @@ class QuizWindow(StyledWidget):
         selected_option = "ABCD"[selected_id]
         correct_option = self.questions[self.current_question_index][5]
         is_correct = (selected_option == correct_option)
+
+        # === Kirim ke API ===
+        result = api_submit_answer(
+            self.user_id,
+            self.lesson_or_chapter_id,
+            self.question_label.text(),
+            selected_option,
+            is_correct
+        )
+
+        if "error" in result:
+            QMessageBox.critical(self, "Error", result["error"])
+
         return selected_option, is_correct
 
     def next_question(self):
@@ -255,20 +269,11 @@ class QuizWindow(StyledWidget):
             total_questions = len(self.questions)
 
             if self.score == total_questions:
-                db = connect_db()
-                cursor = db.cursor()
-                cursor.execute("""
-                    INSERT INTO user_progress (user_id, chapter_id, completed)
-                    VALUES (%s, %s, TRUE)
-                    ON DUPLICATE KEY UPDATE completed = TRUE
-                """, (self.user_id, self.lesson_or_chapter_id))
-                db.commit()
-                db.close()
-                QMessageBox.information(self, "Selesai", f"Skor Anda sempurna!\nBAB dianggap selesai.")
-            else:
-                QMessageBox.warning(self, "Belum Lulus", f"Skor Anda: {self.score}/{total_questions}\nAnda harus menjawab semua soal dengan benar untuk menyelesaikan BAB.")
-
-            self.close()
+                result = api_mark_chapter_complete(self.user_id, self.lesson_or_chapter_id)
+                if "error" in result:
+                    QMessageBox.warning(self, "Warning", f"Bab selesai tapi gagal simpan progress: {result['error']}")
+                else:
+                    QMessageBox.information(self, "Selesai", "Skor sempurna! BAB ditandai selesai.")
             if self.on_finish:
                 self.on_finish()
             return
