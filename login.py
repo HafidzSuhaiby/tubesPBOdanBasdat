@@ -2,17 +2,13 @@ from PyQt5.QtWidgets import (
     QApplication, QWidget, QLabel, QLineEdit, QPushButton, QVBoxLayout, QMessageBox, QFrame, QSpacerItem, QSizePolicy
 )
 from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QPixmap
 from PyQt5.QtGui import QFont, QPalette, QLinearGradient, QColor, QBrush
 import sys
 from database import register_user, login_user, reset_password, connect_db
 from menu import MenuWindow  
 from PyQt5.QtWidgets import QApplication, QWidget, QLabel
 from PyQt5.QtCore import Qt, QTimer, QPropertyAnimation, QPoint
-from PyQt5.QtGui import QFont
-from users import Admin, SiswaBiasa, SiswaSuper
-import requests
-from api import api_login
+from PyQt5.QtGui import QFont,QPixmap
 
 
 class SplashScreenWindow(QWidget):
@@ -32,7 +28,7 @@ class SplashScreenWindow(QWidget):
 
         # Tambahkan QLabel untuk gambar
         self.image_label = QLabel(self)
-        self.image_label.setPixmap(QPixmap("logo2.png").scaled(200, 200, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        self.image_label.setPixmap(QPixmap("profil.png").scaled(200, 200, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         self.image_label.setAlignment(Qt.AlignCenter)
         self.image_label.setFixedSize(200, 200)
         self.image_label.setAttribute(Qt.WA_TranslucentBackground)
@@ -47,15 +43,6 @@ class SplashScreenWindow(QWidget):
         self.animation.setEndValue(QPoint((self.width() - 200) // 2, (self.height() - 200) // 2))
         self.animation.finished.connect(self.finish_animation)
         self.animation.start()
-
-    def finish_animation(self):
-        QTimer.singleShot(1000, self.show_login)
-
-    def show_login(self):
-        self.login_window = LoginWindow()
-        self.login_window.show()
-        self.close()
-
 
     def finish_animation(self):
         QTimer.singleShot(1000, self.show_login)
@@ -293,32 +280,33 @@ class LoginWindow(QWidget):
     def handle_login(self):
         username = self.username_input.text()
         password = self.password_input.text()
-
-        result = api_login(username, password)
-
-        if "error" in result:
-            QMessageBox.critical(self, "Error", f"Gagal koneksi ke server:\n{result['error']}")
+        
+        if not username or not password:
+            QMessageBox.warning(self, "Peringatan", "Email dan password harus diisi.")
             return
+        
+        user = login_user(username, password)  # Panggil dari database
+        
+        if user:
+            user_id, role = user
+            QMessageBox.information(self, "Sukses", f"Selamat datang, {username}!")
+            
+            if role == "admin":
+                from admin import AdminMenuWindow
+                self.menu_window = AdminMenuWindow(username, user_id)
+                self.menu_window.show()
+                self.close()
+            else:
+                try:
+                    from menu import MenuWindow
+                    self.menu_window = MenuWindow(username, user_id)
+                    self.menu_window.show()
+                    self.close()
+                except Exception as e:
+                    print("Gagal membuka menu:", e)
 
-        if result["status"] == "fail":
-            QMessageBox.warning(self, "Login Gagal", result.get("message", "Username/password salah"))
-            return
-
-        user_id = result["id"]
-        role = result["role"]
-
-        if role == "admin":
-            user_obj = Admin(user_id, username)
-        elif role == "siswa_super":
-            user_obj = SiswaSuper(user_id, username)
         else:
-            user_obj = SiswaBiasa(user_id, username)
-
-        QMessageBox.information(self, "Login Sukses", f"Selamat datang {username}")
-        from menu import MenuWindow
-        self.menu_window = MenuWindow(user_obj.username, user_obj.user_id)
-        self.menu_window.show()
-        self.close()
+            QMessageBox.warning(self, "Gagal", "Username atau password salah.")
 
 
 

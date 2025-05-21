@@ -7,10 +7,6 @@ from PyQt5.QtWidgets import QComboBox, QListWidget, QListWidgetItem
 from database import get_chapters_by_lesson, add_chapter
 from quiz import QuizWindow
 from PyQt5.QtCore import Qt
-from api import api_add_lesson, api_get_lessons, api_add_chapter, api_add_question
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QListWidget, QListWidgetItem, QMessageBox, QFrame
-from PyQt5.QtCore import Qt
-from database import connect_db, get_chapters_by_lesson
 
 # ========== Lesson Manager ==========
 class LessonManager(QWidget):
@@ -36,23 +32,25 @@ class LessonManager(QWidget):
         self.setLayout(layout)
 
     def add_lesson(self):
-        title = self.title_input.text().strip()
-        desc = self.desc_input.text().strip()
+        title = self.title_input.text()
+        desc = self.desc_input.text()
 
         if not title:
             QMessageBox.warning(self, "Gagal", "Judul pelajaran tidak boleh kosong.")
             return
 
-        result = api_add_lesson(title, desc)
-
-        if "error" in result:
-            QMessageBox.critical(self, "Error", result["error"])
-        elif result["status"] == "success":
-            QMessageBox.information(self, "Berhasil", result["message"])
+        try:
+            db = connect_db()
+            cursor = db.cursor()
+            cursor.execute("INSERT INTO lessons (title, description) VALUES (%s, %s)", (title, desc))
+            db.commit()
+            QMessageBox.information(self, "Berhasil", "Pelajaran berhasil ditambahkan.")
             self.title_input.clear()
             self.desc_input.clear()
-        else:
-            QMessageBox.warning(self, "Gagal", result.get("message", "Terjadi kesalahan."))
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Gagal menambahkan pelajaran:\n{e}")
+        finally:
+            db.close()
 
 
 # ========== Question Manager ==========
@@ -102,16 +100,19 @@ class QuestionManager(QWidget):
         self.load_lessons()
 
     def load_lessons(self):
-        self.lesson_combo.clear()
-        self.lesson_map = {}
-        results = api_get_lessons()
+        db = connect_db()
+        cursor = db.cursor()
+        cursor.execute("SELECT id, title FROM lessons")
+        lessons = cursor.fetchall()
+        db.close()
 
-        if isinstance(results, list):
-            for lesson in results:
-                self.lesson_combo.addItem(lesson["title"])
-                self.lesson_map[lesson["title"]] = lesson["id"]
-        else:
-            QMessageBox.critical(self, "Error", results.get("error", "Gagal load pelajaran"))
+        self.lesson_map = {}
+        self.lesson_combo.clear()
+        for id_, title in lessons:
+            self.lesson_map[title] = id_
+            self.lesson_combo.addItem(title)
+
+        self.load_chapters()
 
     def load_chapters(self):
         lesson_title = self.lesson_combo.currentText()
@@ -203,6 +204,11 @@ class ChapterManager(QWidget):
             else:
                 QMessageBox.warning(self, "Gagal", "Gagal menambahkan bab.")
 
+
+
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QListWidget, QListWidgetItem, QMessageBox, QFrame
+from PyQt5.QtCore import Qt
+from database import connect_db, get_chapters_by_lesson
 
 class StyledWidget(QWidget):
     def __init__(self, *args, **kwargs):
@@ -352,9 +358,8 @@ class ChapterWindow(StyledWidget):
                 cursor.execute("SELECT COUNT(*) FROM questions WHERE chapter_id = %s", (chap_id,))
                 total = cursor.fetchone()[0]
 
-                cursor.execute("SELECT COUNT(*) FROM user_answers WHERE user_id = %s AND chapter_id = %s AND correct = TRUE", (self.user_id, chap_id))
+                cursor.execute("SELECT COUNT(*) FROM user_answers WHERE user_id = %s AND chapter_id = %s", (self.user_id, chap_id))
                 answered = cursor.fetchone()[0]
-
 
                 locked = False
 
@@ -385,17 +390,6 @@ class ChapterWindow(StyledWidget):
         chapter_id = item.data(Qt.UserRole)
         chapter_title = item.text().split(" - ")[0]
         if chapter_id:
-            from quiz import QuizWindow
-            self.quiz_window = QuizWindow(
-                self.username, self.user_id, chapter_id, chapter_title,
-                is_chapter=True,
-                on_finish=self.return_to_menu
-            )
+            self.quiz_window = QuizWindow(self.username, self.user_id, chapter_id, chapter_title, is_chapter=True)
             self.quiz_window.show()
             self.close()
-
-    def return_to_menu(self):
-        from menu import MenuWindow
-        self.menu_window = MenuWindow(self.username, self.user_id)
-        self.menu_window.show()
-

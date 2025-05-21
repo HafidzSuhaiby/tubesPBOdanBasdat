@@ -1,7 +1,7 @@
 class User:
     def __init__(self, user_id, username, role):
         self.__user_id = user_id
-        self.username = username  # pakai setter supaya validasi jalan
+        self.username = username  
         self.__role = role
 
     @property
