@@ -1,7 +1,7 @@
 class User:
     def __init__(self, user_id, username, role):
         self.__user_id = user_id
-        self.username = username  
+        self.username = username  # pakai setter supaya validasi jalan
         self.__role = role
 
     @property
@@ -47,6 +47,8 @@ class SiswaBiasa(User):
 class SiswaSuper(User):
     def __init__(self, user_id, username):
         super().__init__(user_id, username, "siswa_super")
+        self.max_lives = 15  # atau gunakan method jika dinamis
 
     def akses_fitur(self):
-        return "Akses penuh."
+        return "Akses penuh dengan 15 nyawa."
+

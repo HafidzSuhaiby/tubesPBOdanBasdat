@@ -1,214 +1,414 @@
 from PyQt5.QtWidgets import (
     QWidget, QLabel, QLineEdit, QTextEdit, QPushButton, QVBoxLayout,
-    QComboBox, QApplication, QMessageBox
+    QComboBox, QMessageBox, QFrame
 )
-from database import connect_db
-from PyQt5.QtWidgets import QComboBox, QListWidget, QListWidgetItem
-from database import get_chapters_by_lesson, add_chapter
+from PyQt5.QtGui import QFont
+from PyQt5.QtWidgets import QComboBox, QListWidget, QListWidgetItem, QWidget, QVBoxLayout, QLabel, QListWidget, QListWidgetItem, QMessageBox, QFrame
 from quiz import QuizWindow
 from PyQt5.QtCore import Qt
+from PyQt5 import QtGui
+from database import connect_db, get_chapters_by_lesson, get_lessons, add_chapter, add_lesson, add_question
 
-# ========== Lesson Manager ==========
+
+# ===================== Lesson Manager =====================
 class LessonManager(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Tambah Pelajaran")
-        layout = QVBoxLayout()
+        self.setWindowIcon(QtGui.QIcon('logo.ico'))
+        self.setFixedSize(720, 800)
+        self.setStyleSheet("""
+            QWidget {
+                background: qlineargradient(
+                    x1: 0, y1: 0, x2: 1, y2: 1,
+                    stop: 0 #4e54c8,
+                    stop: 1 #8f94fb
+                );
+            }
+        """)
 
-        self.title_input = QLineEdit()
-        self.title_input.setPlaceholderText("Judul pelajaran (misal: Bahasa Inggris - Dasar)")
-        layout.addWidget(QLabel("Judul Pelajaran"))
-        layout.addWidget(self.title_input)
+        self.card = QFrame(self)
+        self.card.setFixedSize(300, 350)
+        self.card.setStyleSheet("""
+            QFrame {
+                background-color: white;
+                border-radius: 10px;
+                padding: 20px;
+            }
+        """)
+        self.card.move((self.width() - self.card.width()) // 2, (self.height() - self.card.height()) // 2)
 
-        self.desc_input = QLineEdit()
-        self.desc_input.setPlaceholderText("Deskripsi (opsional)")
-        layout.addWidget(QLabel("Deskripsi"))
-        layout.addWidget(self.desc_input)
+        layout = QVBoxLayout(self.card)
+        layout.setSpacing(15)
+        layout.setAlignment(Qt.AlignTop)
 
-        self.add_btn = QPushButton("Tambah Pelajaran")
-        self.add_btn.clicked.connect(self.add_lesson)
-        layout.addWidget(self.add_btn)
+        title = QLabel("Tambah Pelajaran", self.card)
+        title.setFont(QFont("Arial", 18, QFont.Bold))
+        title.setAlignment(Qt.AlignCenter)
+        layout.addWidget(title)
 
-        self.setLayout(layout)
+        self.lesson_input = QLineEdit()
+        self.lesson_input.setPlaceholderText("Nama Pelajaran")
+        self.lesson_input.setStyleSheet("""
+            QLineEdit {
+                background-color: #f0f0f0;
+                padding: 10px;
+                border-radius: 5px;
+                font-size: 14px;
+                border: 1px solid #ccc;
+            }
+        """)
+        layout.addWidget(self.lesson_input)
 
-    def add_lesson(self):
-        title = self.title_input.text()
-        desc = self.desc_input.text()
+        save_btn = QPushButton("Simpan")
+        save_btn.setStyleSheet("""
+            QPushButton {
+                background-color: qlineargradient(
+                    x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #4e54c8, stop:1 #8f94fb
+                );
+                color: white;
+                padding: 10px;
+                font-size: 14px;
+                border: none;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: #5d63d8;
+            }
+        """)
+        save_btn.clicked.connect(self.save_lesson)
+        layout.addWidget(save_btn)
 
-        if not title:
-            QMessageBox.warning(self, "Gagal", "Judul pelajaran tidak boleh kosong.")
+        outer_layout = QVBoxLayout(self)
+        outer_layout.setAlignment(Qt.AlignCenter)
+        outer_layout.addWidget(self.card)
+
+    def save_lesson(self):
+        lesson_name = self.lesson_input.text().strip()
+        if not lesson_name:
+            QMessageBox.warning(self, "Peringatan", "Nama pelajaran tidak boleh kosong!")
             return
-
-        try:
-            db = connect_db()
-            cursor = db.cursor()
-            cursor.execute("INSERT INTO lessons (title, description) VALUES (%s, %s)", (title, desc))
-            db.commit()
-            QMessageBox.information(self, "Berhasil", "Pelajaran berhasil ditambahkan.")
-            self.title_input.clear()
-            self.desc_input.clear()
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Gagal menambahkan pelajaran:\n{e}")
-        finally:
-            db.close()
+        if add_lesson(lesson_name, ""):
+            QMessageBox.information(self, "Sukses", f"Pelajaran '{lesson_name}' berhasil disimpan.")
+            self.close()
+        else:
+            QMessageBox.warning(self, "Gagal", "Terjadi kesalahan saat menyimpan pelajaran.")
 
 
-# ========== Question Manager ==========
-class QuestionManager(QWidget):
-    def __init__(self):
-        super().__init__()
-        self.setWindowTitle("Tambah Soal")
-
-        layout = QVBoxLayout()
-
-        # Pilih pelajaran
-        self.lesson_combo = QComboBox()
-        layout.addWidget(QLabel("Pilih Pelajaran"))
-        layout.addWidget(self.lesson_combo)
-        self.lesson_combo.currentIndexChanged.connect(self.load_chapters)
-
-        # Pilih bab
-        self.chapter_combo = QComboBox()
-        layout.addWidget(QLabel("Pilih Bab"))
-        layout.addWidget(self.chapter_combo)
-
-        # Pertanyaan dan opsi
-        self.question_input = QTextEdit()
-        layout.addWidget(QLabel("Pertanyaan"))
-        layout.addWidget(self.question_input)
-
-        self.option_a = QLineEdit()
-        self.option_b = QLineEdit()
-        self.option_c = QLineEdit()
-        self.option_d = QLineEdit()
-
-        layout.addWidget(QLabel("Opsi A")); layout.addWidget(self.option_a)
-        layout.addWidget(QLabel("Opsi B")); layout.addWidget(self.option_b)
-        layout.addWidget(QLabel("Opsi C")); layout.addWidget(self.option_c)
-        layout.addWidget(QLabel("Opsi D")); layout.addWidget(self.option_d)
-
-        self.correct_option = QComboBox()
-        self.correct_option.addItems(["A", "B", "C", "D"])
-        layout.addWidget(QLabel("Jawaban Benar"))
-        layout.addWidget(self.correct_option)
-
-        self.add_btn = QPushButton("Tambah Soal")
-        self.add_btn.clicked.connect(self.add_question)
-        layout.addWidget(self.add_btn)
-
-        self.setLayout(layout)
-        self.load_lessons()
-
-    def load_lessons(self):
-        db = connect_db()
-        cursor = db.cursor()
-        cursor.execute("SELECT id, title FROM lessons")
-        lessons = cursor.fetchall()
-        db.close()
-
-        self.lesson_map = {}
-        self.lesson_combo.clear()
-        for id_, title in lessons:
-            self.lesson_map[title] = id_
-            self.lesson_combo.addItem(title)
-
-        self.load_chapters()
-
-    def load_chapters(self):
-        lesson_title = self.lesson_combo.currentText()
-        lesson_id = self.lesson_map.get(lesson_title)
-        if not lesson_id:
-            return
-
-        db = connect_db()
-        cursor = db.cursor()
-        cursor.execute("SELECT id, title FROM chapters WHERE lesson_id = %s", (lesson_id,))
-        chapters = cursor.fetchall()
-        db.close()
-
-        self.chapter_map = {}
-        self.chapter_combo.clear()
-        for id_, title in chapters:
-            self.chapter_map[title] = id_
-            self.chapter_combo.addItem(title)
-
-    def add_question(self):
-        chapter_title = self.chapter_combo.currentText()
-        chapter_id = self.chapter_map.get(chapter_title)
-        
-        question = self.question_input.toPlainText()
-        a = self.option_a.text()
-        b = self.option_b.text()
-        c = self.option_c.text()
-        d = self.option_d.text()
-        correct = self.correct_option.currentText()
-        
-        if not all([question, a, b, c, d]):
-            QMessageBox.warning(self, "Gagal", "Semua isian harus diisi.")
-            return
-        try:
-            db = connect_db()
-            cursor = db.cursor()
-            cursor.execute("""
-                        INSERT INTO questions 
-                        (chapter_id, question, option_a, option_b, option_c, option_d, correct_option)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s)""", (chapter_id, question, a, b, c, d, correct))
-            db.commit()
-            QMessageBox.information(self, "Berhasil", "Soal berhasil ditambahkan.")
-            self.question_input.clear()
-            self.option_a.clear()
-            self.option_b.clear()
-            self.option_c.clear()
-            self.option_d.clear()
-            
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Gagal menambahkan soal:\n{e}")
-        finally:
-            db.close()
-
+# ===================== Chapter Manager =====================
 class ChapterManager(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Tambah Bab")
-        layout = QVBoxLayout()
+        self.setWindowTitle("Tambah BAB")
+        self.setWindowIcon(QtGui.QIcon('logo.ico'))
+        self.setFixedSize(720, 800)
+        self.setStyleSheet("""
+            QWidget {
+                background: qlineargradient(
+                    x1: 0, y1: 0, x2: 1, y2: 1,
+                    stop: 0 #4e54c8,
+                    stop: 1 #8f94fb
+                );
+            }
+        """)
+
+        self.card = QFrame(self)
+        self.card.setFixedSize(300, 400)
+        self.card.setStyleSheet("""
+            QFrame {
+                background-color: white;
+                border-radius: 10px;
+                padding: 20px;
+            }
+        """)
+        self.card.move((self.width() - self.card.width()) // 2, (self.height() - self.card.height()) // 2)
+
+        layout = QVBoxLayout(self.card)
+        layout.setSpacing(15)
+        layout.setAlignment(Qt.AlignTop)
+
+        title = QLabel("Tambah BAB", self.card)
+        title.setFont(QFont("Arial", 18, QFont.Bold))
+        title.setAlignment(Qt.AlignCenter)
+        layout.addWidget(title)
+
+        label = QLabel("Pilih Pelajaran:")
+        label.setFont(QFont("Arial", 10))
+        layout.addWidget(label)
 
         self.lesson_combo = QComboBox()
-        db = connect_db()
-        cursor = db.cursor()
-        cursor.execute("SELECT id, title FROM lessons")
-        for id_, title in cursor.fetchall():
-            self.lesson_combo.addItem(title, id_)
-        db.close()
-
-        layout.addWidget(QLabel("Pilih Pelajaran"))
+        self.lesson_combo.setStyleSheet("""
+            QComboBox {
+                background-color: #f0f0f0;
+                padding: 10px;
+                border-radius: 5px;
+                font-size: 14px;
+                border: 1px solid #ccc;
+            }
+            QComboBox QAbstractItemView {
+                background-color: white;
+                selection-background-color: #4e54c8;
+                border-radius: 5px;
+                padding: 5px;
+            }
+        """)
+        self.lesson_map = {}
+        self.load_lessons()
         layout.addWidget(self.lesson_combo)
 
-        self.title_input = QLineEdit()
-        self.title_input.setPlaceholderText("Judul Bab")
-        layout.addWidget(QLabel("Judul Bab"))
-        layout.addWidget(self.title_input)
+        self.chapter_input = QLineEdit()
+        self.chapter_input.setPlaceholderText("Nama BAB")
+        self.chapter_input.setStyleSheet("""
+            QLineEdit {
+                background-color: #f0f0f0;
+                padding: 10px;
+                border-radius: 5px;
+                font-size: 14px;
+                border: 1px solid #ccc;
+            }
+        """)
+        layout.addWidget(self.chapter_input)
 
-        add_btn = QPushButton("Tambah Bab")
-        add_btn.clicked.connect(self.save)
-        layout.addWidget(add_btn)
+        save_btn = QPushButton("Simpan")
+        save_btn.setStyleSheet("""
+            QPushButton {
+                background-color: qlineargradient(
+                    x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #4e54c8, stop:1 #8f94fb
+                );
+                color: white;
+                padding: 10px;
+                font-size: 14px;
+                border: none;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: #5d63d8;
+            }
+        """)
+        save_btn.clicked.connect(self.save_chapter)
+        layout.addWidget(save_btn)
 
-        self.setLayout(layout)
+        outer_layout = QVBoxLayout(self)
+        outer_layout.setAlignment(Qt.AlignCenter)
+        outer_layout.addWidget(self.card)
 
-    def save(self):
-        title = self.title_input.text()
-        lesson_id = self.lesson_combo.currentData()
-        if title:
-            if add_chapter(title, lesson_id):
-                QMessageBox.information(self, "Berhasil", "Bab berhasil ditambahkan.")
-                self.title_input.clear()
-            else:
-                QMessageBox.warning(self, "Gagal", "Gagal menambahkan bab.")
+    def load_lessons(self):
+        try:
+            conn = connect_db()
+            cursor = conn.cursor()
+            cursor.execute("SELECT id, title FROM lessons")
+            lessons = cursor.fetchall()
+            conn.close()
+
+            for lesson_id, title in lessons:
+                self.lesson_combo.addItem(title)
+                self.lesson_map[title] = lesson_id
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Gagal memuat pelajaran: {e}")
+
+    def save_chapter(self):
+        chapter_title = self.chapter_input.text().strip()
+        selected_lesson_title = self.lesson_combo.currentText()
+        lesson_id = self.lesson_map.get(selected_lesson_title)
+
+        if not chapter_title:
+            QMessageBox.warning(self, "Peringatan", "Nama BAB tidak boleh kosong!")
+            return
+
+        if not lesson_id:
+            QMessageBox.warning(self, "Peringatan", "Pilih pelajaran terlebih dahulu.")
+            return
+
+        if add_chapter(chapter_title, lesson_id):
+            QMessageBox.information(self, "Berhasil", f"BAB '{chapter_title}' berhasil ditambahkan.")
+            self.close()
+        else:
+            QMessageBox.warning(self, "Gagal", "Gagal menyimpan BAB.")
 
 
+# ===================== Question Manager =====================
+class QuestionManager(QWidget):
+    def __init__(self, parent_admin_window=None):
+        super().__init__()
+        self.setWindowTitle("Tambah Soal")
+        self.setWindowIcon(QtGui.QIcon('logo.ico'))
+        self.setFixedSize(720, 800)
+        self.setStyleSheet("""
+            QWidget {
+                background: qlineargradient(
+                    x1: 0, y1: 0, x2: 1, y2: 1,
+                    stop: 0 #4e54c8,
+                    stop: 1 #8f94fb
+                );
+            }
+        """)
 
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QListWidget, QListWidgetItem, QMessageBox, QFrame
-from PyQt5.QtCore import Qt
-from database import connect_db, get_chapters_by_lesson
+        self.parent_admin_window = parent_admin_window
+
+        self.card = QFrame(self)
+        self.card.setFixedSize(400, 650)
+        self.card.setStyleSheet("""
+            QFrame {
+                background-color: white;
+                border-radius: 12px;
+                padding: 30px;
+            }
+        """)
+        self.card.move((self.width() - self.card.width()) // 2, (self.height() - self.card.height()) // 2)
+
+        layout = QVBoxLayout(self.card)
+        layout.setSpacing(15)
+        layout.setAlignment(Qt.AlignTop)
+
+        title = QLabel("Tambah Soal", self.card)
+        title.setFont(QFont("Arial", 18, QFont.Bold))
+        title.setAlignment(Qt.AlignCenter)
+        layout.addWidget(title)
+
+        # Pelajaran
+        layout.addWidget(self._label("Pilih Pelajaran:"))
+        self.lesson_combo = QComboBox()
+        self._style_combo(self.lesson_combo)
+        layout.addWidget(self.lesson_combo)
+
+        # BAB
+        layout.addWidget(self._label("Pilih BAB:"))
+        self.chapter_combo = QComboBox()
+        self._style_combo(self.chapter_combo)
+        layout.addWidget(self.chapter_combo)
+
+        self.lesson_map = {}
+        self.chapter_map = {}
+        self.lesson_combo.currentIndexChanged.connect(self.update_chapters)
+
+        # Input soal dan pilihan
+        layout.addWidget(self._line_input("Pertanyaan", "question_input"))
+        layout.addWidget(self._line_input("Pilihan A", "option_a_input"))
+        layout.addWidget(self._line_input("Pilihan B", "option_b_input"))
+        layout.addWidget(self._line_input("Pilihan C", "option_c_input"))
+        layout.addWidget(self._line_input("Pilihan D", "option_d_input"))
+
+        # Jawaban Benar
+        layout.addWidget(self._label("Jawaban Benar:"))
+        self.correct_option_combo = QComboBox()
+        self.correct_option_combo.addItems(["A", "B", "C", "D"])
+        self._style_combo(self.correct_option_combo)
+        layout.addWidget(self.correct_option_combo)
+
+        # Tombol simpan
+        save_btn = QPushButton("Simpan Soal")
+        save_btn.setMinimumHeight(40)
+        save_btn.setStyleSheet("""
+            QPushButton {
+                background-color: qlineargradient(
+                    x1: 0, y1: 0, x2: 1, y2: 0,
+                    stop: 0 #4e54c8, stop: 1 #8f94fb
+                );
+                color: white;
+                border: none;
+                border-radius: 6px;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background-color: #5d63d8;
+            }
+        """)
+        save_btn.clicked.connect(self.save_question)
+        layout.addWidget(save_btn)
+
+        outer = QVBoxLayout(self)
+        outer.setAlignment(Qt.AlignCenter)
+        outer.addWidget(self.card)
+
+        self.load_lessons()
+
+    def _label(self, text):
+        label = QLabel(text)
+        label.setFont(QFont("Arial", 11))
+        return label
+
+    def _style_combo(self, combo):
+        combo.setMinimumHeight(35)
+        combo.setStyleSheet("""
+            QComboBox {
+                background-color: #f0f0f0;
+                padding: 8px;
+                border-radius: 5px;
+                font-size: 13px;
+                border: 1px solid #ccc;
+            }
+            QComboBox QAbstractItemView {
+                background-color: white;
+                selection-background-color: #4e54c8;
+                border-radius: 5px;
+            }
+        """)
+
+    def _line_input(self, placeholder, attr_name):
+        input_field = QLineEdit()
+        input_field.setPlaceholderText(placeholder)
+        input_field.setMinimumHeight(35)
+        input_field.setStyleSheet("""
+            QLineEdit {
+                background-color: #f0f0f0;
+                padding: 8px;
+                border-radius: 5px;
+                font-size: 13px;
+                border: 1px solid #ccc;
+            }
+        """)
+        setattr(self, attr_name, input_field)
+        return input_field
+
+    def load_lessons(self):
+        lessons = get_lessons()
+        self.lesson_combo.clear()
+        self.lesson_map.clear()
+        for lesson_id, title in lessons:
+            self.lesson_combo.addItem(title)
+            self.lesson_map[title] = lesson_id
+        self.update_chapters()
+
+    def update_chapters(self):
+        lesson_title = self.lesson_combo.currentText()
+        lesson_id = self.lesson_map.get(lesson_title)
+        self.chapter_combo.clear()
+        self.chapter_map.clear()
+        if lesson_id:
+            chapters = get_chapters_by_lesson(lesson_id)
+            for chapter_id, title in chapters:
+                self.chapter_combo.addItem(title)
+                self.chapter_map[title] = chapter_id
+
+    def save_question(self):
+        question = self.question_input.text().strip()
+        option_a = self.option_a_input.text().strip()
+        option_b = self.option_b_input.text().strip()
+        option_c = self.option_c_input.text().strip()
+        option_d = self.option_d_input.text().strip()
+        correct_option = self.correct_option_combo.currentText()
+
+        chapter_title = self.chapter_combo.currentText()
+        chapter_id = self.chapter_map.get(chapter_title)
+
+        if not all([question, option_a, option_b, option_c, option_d]):
+            QMessageBox.warning(self, "Peringatan", "Semua field harus diisi.")
+            return
+
+        if chapter_id is None:
+            QMessageBox.warning(self, "Peringatan", "BAB belum dipilih.")
+            return
+
+        if add_question(question, option_a, option_b, option_c, option_d, correct_option, chapter_id):
+            QMessageBox.information(self, "Sukses", "Soal berhasil disimpan.")
+            self.close()
+            if self.parent_admin_window:
+                self.parent_admin_window.show()
+        else:
+            QMessageBox.warning(self, "Gagal", "Terjadi kesalahan saat menyimpan soal.")
+
 
 class StyledWidget(QWidget):
     def __init__(self, *args, **kwargs):
@@ -358,8 +558,9 @@ class ChapterWindow(StyledWidget):
                 cursor.execute("SELECT COUNT(*) FROM questions WHERE chapter_id = %s", (chap_id,))
                 total = cursor.fetchone()[0]
 
-                cursor.execute("SELECT COUNT(*) FROM user_answers WHERE user_id = %s AND chapter_id = %s", (self.user_id, chap_id))
+                cursor.execute("SELECT COUNT(*) FROM user_answers WHERE user_id = %s AND chapter_id = %s AND correct = TRUE", (self.user_id, chap_id))
                 answered = cursor.fetchone()[0]
+
 
                 locked = False
 
@@ -390,6 +591,17 @@ class ChapterWindow(StyledWidget):
         chapter_id = item.data(Qt.UserRole)
         chapter_title = item.text().split(" - ")[0]
         if chapter_id:
-            self.quiz_window = QuizWindow(self.username, self.user_id, chapter_id, chapter_title, is_chapter=True)
+            from quiz import QuizWindow
+            self.quiz_window = QuizWindow(
+                self.username, self.user_id, chapter_id, chapter_title,
+                is_chapter=True,
+                on_finish=self.return_to_menu
+            )
             self.quiz_window.show()
             self.close()
+
+    def return_to_menu(self):
+        from menu import MenuWindow
+        self.menu_window = MenuWindow(self.username, self.user_id)
+        self.menu_window.show()
+

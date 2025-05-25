@@ -5,6 +5,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt
 from database import connect_db
 from datetime import date
+from PyQt5 import QtGui
 
 
 class StyledWidget(QWidget):
@@ -19,12 +20,11 @@ class StyledWidget(QWidget):
                 );
                 font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             }
-
             QLabel#questionBox {
                 font-size: 16px;
                 font-weight: 500;
                 color: #222;
-                background: #f0f4ff; /* biru lembut */
+                background: #f0f4ff;
                 border-radius: 16px;
                 padding: 20px 24px;
                 margin: 10px 0 30px 0;
@@ -33,7 +33,6 @@ class StyledWidget(QWidget):
                 min-height: 120px;
                 qproperty-alignment: 'AlignTop | AlignLeft';
             }
-
             QRadioButton {
                 background: #f0f4ff;
                 padding: 16px 20px;
@@ -45,11 +44,9 @@ class StyledWidget(QWidget):
                 color: #333;
                 min-width: 300px;
             }
-
             QRadioButton:hover {
                 background-color: #e0e9ff;
             }
-
             QPushButton {
                 background-color: #ffffff;
                 border: none;
@@ -62,12 +59,10 @@ class StyledWidget(QWidget):
                 min-width: 120px;
                 box-shadow: 0 3px 10px rgba(93, 84, 164, 0.2);
             }
-
             QPushButton:hover {
                 background-color: #e3e0fa;
                 box-shadow: 0 4px 12px rgba(93, 84, 164, 0.5);
             }
-
             QPushButton:disabled {
                 background-color: #ccc;
                 color: #888;
@@ -77,15 +72,18 @@ class StyledWidget(QWidget):
 
 
 class QuizWindow(StyledWidget):
-    def __init__(self, username, user_id, id_value, title, is_chapter=False):
+    def __init__(self, username, user_id, id_value, title, is_chapter=False, on_finish=None):
         super().__init__()
         self.setWindowTitle(f"Kuis: {title}")
+        self.setWindowIcon(QtGui.QIcon('logo.ico'))
         self.setMinimumSize(720, 800)
         self.username = username
         self.user_id = user_id
         self.lesson_or_chapter_id = id_value
         self.is_chapter = is_chapter
         self.lesson_title = title
+        self.on_finish = on_finish
+        self.jawaban_benar = []
 
         self.layout = QVBoxLayout()
         self.layout.setAlignment(Qt.AlignTop | Qt.AlignHCenter)
@@ -94,6 +92,7 @@ class QuizWindow(StyledWidget):
         self.current_question_index = 0
         self.score = 0
         self.questions = []
+        self.user_answers = {}  # <-- untuk menyimpan jawaban user per soal
 
         self.lives = self.check_and_reset_lives()
         if self.lives <= 0:
@@ -113,18 +112,20 @@ class QuizWindow(StyledWidget):
     def check_and_reset_lives(self):
         db = connect_db()
         cursor = db.cursor()
-        cursor.execute("SELECT lives, last_life_reset FROM users WHERE id = %s", (self.user_id,))
+        cursor.execute("SELECT lives, last_life_reset, role FROM users WHERE id = %s", (self.user_id,))
         row = cursor.fetchone()
         if not row:
             db.close()
             return 0
 
-        lives, last_reset = row
+        lives, last_reset, role = row
         today = date.today()
+
         if last_reset is None or str(last_reset) != str(today):
-            cursor.execute("UPDATE users SET lives = 5, last_life_reset = %s WHERE id = %s", (today, self.user_id))
+            new_lives = 15 if role == "siswa_super" else 5
+            cursor.execute("UPDATE users SET lives = %s, last_life_reset = %s WHERE id = %s", (new_lives, today, self.user_id))
             db.commit()
-            lives = 5
+            lives = new_lives
 
         db.close()
         return lives
@@ -146,14 +147,12 @@ class QuizWindow(StyledWidget):
         db.close()
 
     def init_ui(self):
-        # Kotak soal, dengan alignment center dan fixed max width supaya nyaman dibaca
         self.question_label = QLabel()
         self.question_label.setObjectName("questionBox")
         self.question_label.setWordWrap(True)
         self.question_label.setAlignment(Qt.AlignCenter)
         self.layout.addWidget(self.question_label)
 
-        # Layout grid jawaban 2x2 dengan jarak lebih besar
         self.answers_layout = QGridLayout()
         self.answers_layout.setHorizontalSpacing(40)
         self.answers_layout.setVerticalSpacing(25)
@@ -170,13 +169,12 @@ class QuizWindow(StyledWidget):
 
         self.layout.addLayout(self.answers_layout)
 
-        # Tombol navigasi
         self.nav_layout = QHBoxLayout()
         self.nav_layout.setAlignment(Qt.AlignCenter)
 
         self.prev_button = QPushButton("Sebelumnya")
         self.prev_button.clicked.connect(self.prev_question)
-        self.prev_button.setEnabled(False)  # awal soal 0 tidak bisa back
+        self.prev_button.setEnabled(False)
         self.nav_layout.addWidget(self.prev_button)
 
         self.next_button = QPushButton("Lanjut")
@@ -191,13 +189,19 @@ class QuizWindow(StyledWidget):
 
         self.question_label.setText(question_text)
 
+        self.button_group.setExclusive(False)
+        for rb in self.radio_buttons:
+            rb.setChecked(False)
+        self.button_group.setExclusive(True)
+
         for rb, text in zip(self.radio_buttons, [a, b, c, d]):
             rb.setText(text)
-            rb.setChecked(False)
 
-        # Update tombol navigasi
+        if self.current_question_index in self.user_answers:
+            selected_id = self.user_answers[self.current_question_index]
+            self.radio_buttons[selected_id].setChecked(True)
+
         self.prev_button.setEnabled(self.current_question_index > 0)
-
         if self.current_question_index == len(self.questions) - 1:
             self.next_button.setText("Selesai")
         else:
@@ -206,12 +210,11 @@ class QuizWindow(StyledWidget):
     def save_answer(self):
         selected_id = self.button_group.checkedId()
         if selected_id == -1:
-            return None, None  # Belum pilih jawaban
+            return None, None
 
+        self.user_answers[self.current_question_index] = selected_id
         selected_option = "ABCD"[selected_id]
-        question_text = self.question_label.text()
-        question_data = self.questions[self.current_question_index]
-        correct_option = question_data[5]
+        correct_option = self.questions[self.current_question_index][5]
         is_correct = (selected_option == correct_option)
         return selected_option, is_correct
 
@@ -222,59 +225,69 @@ class QuizWindow(StyledWidget):
             QMessageBox.warning(self, "Peringatan", "Pilih salah satu jawaban terlebih dahulu.")
             return
 
-        # Jika jawab salah, kurangi nyawa
-        if not is_correct:
-            self.lives -= 1
-            db = connect_db()
-            cursor = db.cursor()
-            cursor.execute("UPDATE users SET lives = %s WHERE id = %s", (self.lives, self.user_id))
-            db.commit()
-            db.close()
-            if self.lives == 0:
-                QMessageBox.warning(self, "Game Over", "Nyawa Anda habis. Coba lagi besok.")
-                self.close()
-                return
+        if self.current_question_index >= len(self.jawaban_benar):
+            self.jawaban_benar.append(is_correct)
         else:
+            self.jawaban_benar[self.current_question_index] = is_correct
+
+        if is_correct:
             self.score += 1
 
-        # Simpan jawaban ke db
         db = connect_db()
         cursor = db.cursor()
-        cursor.execute("""INSERT INTO user_answers (user_id, chapter_id, question, answer, correct) VALUES (%s, %s, %s, %s, %s)
-        ON DUPLICATE KEY UPDATE answer = VALUES(answer), correct = VALUES(correct)""",
-                       (self.user_id, self.lesson_or_chapter_id, self.question_label.text(), selected_option, is_correct))
+        cursor.execute("""
+            INSERT INTO user_answers (user_id, chapter_id, question, answer, correct) 
+            VALUES (%s, %s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE answer = VALUES(answer), correct = VALUES(correct)
+        """, (self.user_id, self.lesson_or_chapter_id, self.question_label.text(), selected_option, is_correct))
         db.commit()
         db.close()
 
-        # Jika soal terakhir
         if self.current_question_index == len(self.questions) - 1:
-            db = connect_db()
-            cursor = db.cursor()
-            cursor.execute("""
-                INSERT INTO user_progress (user_id, chapter_id, completed)
-                VALUES (%s, %s, TRUE)
-                ON DUPLICATE KEY UPDATE completed = TRUE
-            """, (self.user_id, self.lesson_or_chapter_id))
-            db.commit()
-            db.close()
+            if False in self.jawaban_benar:
+                self.lives -= 1
+                db = connect_db()
+                cursor = db.cursor()
+                cursor.execute("UPDATE users SET lives = %s WHERE id = %s", (self.lives, self.user_id))
+                db.commit()
+                db.close()
+                if self.lives == 0:
+                    QMessageBox.warning(self, "Game Over", "Nyawa Anda habis. Coba lagi besok.")
+                    self.close()
+                    return
 
-            QMessageBox.information(self, "Selesai", f"Kuis selesai!\nSkor Anda: {self.score}/{len(self.questions)}")
+            total_questions = len(self.questions)
+
+            if self.score == total_questions:
+                db = connect_db()
+                cursor = db.cursor()
+                cursor.execute("""
+                    INSERT INTO user_progress (user_id, chapter_id, completed)
+                    VALUES (%s, %s, TRUE)
+                    ON DUPLICATE KEY UPDATE completed = TRUE
+                """, (self.user_id, self.lesson_or_chapter_id))
+                db.commit()
+                db.close()
+                QMessageBox.information(self, "Selesai", f"Skor Anda sempurna!\nBAB dianggap selesai.")
+            else:
+                QMessageBox.warning(self, "Belum Lulus", f"Skor Anda: {self.score}/{total_questions}\nAnda harus menjawab semua soal dengan benar untuk menyelesaikan BAB.")
+
             self.close()
+            if self.on_finish:
+                self.on_finish()
             return
 
-        # Pindah ke soal berikutnya
         self.current_question_index += 1
         self.display_question()
 
     def prev_question(self):
         if self.current_question_index == 0:
-            return  # Tidak bisa ke belakang lagi
+            return
 
         selected_option, is_correct = self.save_answer()
         if selected_option is None:
             QMessageBox.warning(self, "Peringatan", "Pilih salah satu jawaban terlebih dahulu.")
             return
 
-        # Pindah soal ke belakang
         self.current_question_index -= 1
         self.display_question()

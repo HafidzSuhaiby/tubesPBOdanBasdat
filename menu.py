@@ -1,27 +1,32 @@
 from PyQt5.QtWidgets import (
     QWidget, QLabel, QVBoxLayout, QListWidget, QListWidgetItem,
-    QApplication, QHBoxLayout, QDialog, QPushButton
+    QApplication, QHBoxLayout, QDialog, QPushButton, QMessageBox
 )
-from PyQt5.QtGui import QPixmap, QCursor
+from PyQt5.QtGui import QPixmap, QCursor, QFont
 from PyQt5.QtCore import Qt
 import sys
+from PyQt5 import QtGui
 from database import connect_db
 from lessons import ChapterWindow
 
+
 # === Dialog Profil ===
 class ProfileDialog(QDialog):
-    def __init__(self, parent, username, email):
+    def __init__(self, parent, username, email, role):
         super().__init__(parent)
         self.setWindowTitle("Profil Pengguna")
-        self.setFixedSize(300, 200)
+        self.setWindowIcon(QtGui.QIcon('logo.ico'))
+        self.setFixedSize(420, 500)
         self.username = username
         self.email = email
+        self.role = role
         self.parent = parent
 
         layout = QVBoxLayout()
-
         layout.addWidget(QLabel(f"Username: {username}"))
         layout.addWidget(QLabel(f"Email: {email}"))
+        layout.addWidget(QLabel(f"Role: {self.parent.role}"))
+
 
         btn_logout = QPushButton("Logout")
         btn_logout.clicked.connect(self.handle_logout)
@@ -30,32 +35,24 @@ class ProfileDialog(QDialog):
         self.setLayout(layout)
 
     def handle_logout(self):
-        from login import LoginWindow  # Import di sini untuk menghindari circular import
+        from login import LoginWindow
         self.login_window = LoginWindow()
         self.login_window.show()
-        self.parent.close()  # Tutup jendela MenuWindow
-        self.close()         # Tutup dialog profil
+        self.parent.close()
+        self.close()
 
 
 # === MenuWindow ===
-from PyQt5.QtWidgets import (
-    QApplication, QWidget, QLabel, QListWidget, QListWidgetItem,
-    QVBoxLayout, QHBoxLayout, QMessageBox
-)
-from PyQt5.QtGui import QPixmap, QCursor, QFont
-from PyQt5.QtCore import Qt
-import sys
-from database import connect_db
-
-
 class MenuWindow(QWidget):
-    def __init__(self, username, user_id, email="user@example.com"):
+    def __init__(self, username, user_id, email="user@example.com", role="siswa_biasa"):
         super().__init__()
         self.setWindowTitle("Pilih Pelajaran")
+        self.setWindowIcon(QtGui.QIcon('logo.ico'))
         self.username = username
         self.user_id = user_id
         self.email = email
-        self.setFixedSize(350, 600)
+        self.role = role
+        self.setFixedSize(720, 800)
 
         self.setStyleSheet("""
         QWidget {
@@ -110,23 +107,26 @@ class MenuWindow(QWidget):
         pixmap = QPixmap("profil.png").scaled(30, 30, Qt.KeepAspectRatio, Qt.SmoothTransformation)
         self.profile_pic.setPixmap(pixmap)
         self.profile_pic.setCursor(QCursor(Qt.PointingHandCursor))
-        self.profile_pic.setStyleSheet("""
-            background: transparent;
-            border-radius: 15px;
-            transition: all 0.3s ease;
-        """)
+        self.profile_pic.setStyleSheet("background: transparent; border-radius: 15px;")
         self.profile_pic.mousePressEvent = self.show_user_info
 
         self.halo_label = QLabel(f"Halo, {username}")
         self.halo_label.setStyleSheet("font-size: 13px; margin-left: 5px; background: transparent;")
         self.halo_label.setFont(QFont("Segoe UI", 10))
 
+        self.lives_label = QLabel()
+        self.lives_label.setStyleSheet("font-size: 13px; color: white; background: transparent; margin-right: 10px;")
+        self.lives_label.setFont(QFont("Segoe UI", 10))
+        self.update_lives_display()
+
         top_bar.addWidget(self.profile_pic)
         top_bar.addWidget(self.halo_label)
         top_bar.addStretch()
+        top_bar.addWidget(self.lives_label)
+
         main_layout.addLayout(top_bar)
 
-        # Label "Silakan pilih pelajaran"
+        # Label judul
         self.pilih_label = QLabel("Silakan pilih pelajaran:")
         self.pilih_label.setAlignment(Qt.AlignCenter)
         self.pilih_label.setStyleSheet("font-size: 16px; margin-top: 30px; background: transparent; color: white;")
@@ -165,18 +165,34 @@ class MenuWindow(QWidget):
             item.setTextAlignment(Qt.AlignCenter)
             self.lesson_list.addItem(item)
 
+    def update_lives_display(self):
+        try:
+            db = connect_db()
+            cursor = db.cursor()
+            cursor.execute("SELECT lives FROM users WHERE id = %s", (self.user_id,))
+            result = cursor.fetchone()
+            db.close()
+            if result:
+                lives = result[0]
+                self.lives_label.setText(f"❤️ {lives}")
+        except Exception as e:
+            self.lives_label.setText("❤️ ?")
+            print("Gagal memuat nyawa:", e)
+
     def start_quiz(self, item):
         try:
             title = item.text()
             lesson_id = self.lesson_map[title]
-            self.chapter_window = ChapterWindow(self.username, self.user_id, lesson_id, title)
+            self.chapter_window = ChapterWindow(
+                self.username, self.user_id, lesson_id, title
+            )
             self.chapter_window.show()
             self.close()
         except Exception as e:
             QMessageBox.critical(self, "ERROR", f"Gagal buka ChapterWindow:\n{e}")
 
     def show_user_info(self, event):
-        dialog = ProfileDialog(self, self.username, self.email)
+        dialog = ProfileDialog(self, self.username, self.email, self.role)
         dialog.exec_()
 
     def logout_user(self):
@@ -186,7 +202,7 @@ class MenuWindow(QWidget):
         self.close()
 
 
-# Pengujian langsung
+# Jalankan aplikasi untuk testing
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = MenuWindow("testuser", 1, "testuser@example.com")

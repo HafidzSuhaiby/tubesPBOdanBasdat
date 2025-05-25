@@ -2,20 +2,23 @@ from PyQt5.QtWidgets import (
     QApplication, QWidget, QLabel, QLineEdit, QPushButton, QVBoxLayout, QMessageBox, QFrame, QSpacerItem, QSizePolicy
 )
 from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QFont, QPalette, QLinearGradient, QColor, QBrush
+from PyQt5.QtGui import QPixmap
+from PyQt5.QtGui import QFont, QPalette, QLinearGradient, QColor, QBrush, QIcon, QPixmap
 import sys
-from database import register_user, login_user, reset_password, connect_db
-from menu import MenuWindow  
+from PyQt5 import QtGui
+from database import register_user, login_user, reset_password, connect_db 
 from PyQt5.QtWidgets import QApplication, QWidget, QLabel
 from PyQt5.QtCore import Qt, QTimer, QPropertyAnimation, QPoint
-from PyQt5.QtGui import QFont,QPixmap
+from PyQt5.QtGui import QFont
+from users import Admin, SiswaBiasa, SiswaSuper
 
 
 class SplashScreenWindow(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Bahasaku - Splash")
-        self.setFixedSize(600, 650)
+        self.setWindowIcon(QtGui.QIcon('logo.ico'))
+        self.setFixedSize(720, 800)
         self.setStyleSheet("""
             QWidget {
                 background: qlineargradient(
@@ -28,12 +31,12 @@ class SplashScreenWindow(QWidget):
 
         # Tambahkan QLabel untuk gambar
         self.image_label = QLabel(self)
-        self.image_label.setPixmap(QPixmap("profil.png").scaled(200, 200, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        self.image_label.setPixmap(QPixmap("logo.png").scaled(200, 200, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         self.image_label.setAlignment(Qt.AlignCenter)
         self.image_label.setFixedSize(200, 200)
         self.image_label.setAttribute(Qt.WA_TranslucentBackground)
         self.image_label.setStyleSheet("background: transparent;")
-        self.image_label.move((self.width() - 200) // 2, self.height())  # mulai dari bawah
+        self.image_label.move((self.width() - 200) // 2, self.height())  
 
 
         # Animasi slide dari bawah ke tengah
@@ -53,11 +56,21 @@ class SplashScreenWindow(QWidget):
         self.close()
 
 
+    def finish_animation(self):
+        QTimer.singleShot(1000, self.show_login)
+
+    def show_login(self):
+        self.login_window = LoginWindow()
+        self.login_window.show()
+        self.close()
+
+
 
 class RegisterWindow(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Register - Duolingo Sederhana")
+        self.setWindowIcon(QtGui.QIcon('logo.ico'))
         self.setFixedSize(720, 800)
         self.setStyleSheet("""
             QWidget {
@@ -172,6 +185,7 @@ class LoginWindow(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Login - Duolingo Sederhana")
+        self.setWindowIcon(QtGui.QIcon('logo.ico'))
         self.setFixedSize(720, 800)
         self.setStyleSheet("""
             QWidget {
@@ -219,7 +233,6 @@ class LoginWindow(QWidget):
         """)
         layout.addWidget(self.username_input)
 
-        # Input password
         self.password_input = QLineEdit()
         self.password_input.setPlaceholderText("Password")
         self.password_input.setEchoMode(QLineEdit.Password)
@@ -255,18 +268,16 @@ class LoginWindow(QWidget):
         self.login_btn.clicked.connect(self.handle_login)
         layout.addWidget(self.login_btn)
 
-        # Forgot Password link
         forgot = QLabel('<a href="#">Forgot Password?</a>', self.card)
         forgot.setAlignment(Qt.AlignCenter)
         forgot.setOpenExternalLinks(False)
-        forgot.linkActivated.connect(self.open_forgot_password)  # <-- ini panggil method baru
+        forgot.linkActivated.connect(self.open_forgot_password) 
         layout.addWidget(forgot)
 
-        # Sign up link
         signup = QLabel("Don\'t have an account? <a href=\"#\">Sign up</a>", self.card)
         signup.setAlignment(Qt.AlignCenter)
         signup.setOpenExternalLinks(False)
-        signup.linkActivated.connect(self.open_register)  # <-- ini juga
+        signup.linkActivated.connect(self.open_register)
         layout.addWidget(signup)
     
     def open_register(self):
@@ -280,40 +291,52 @@ class LoginWindow(QWidget):
     def handle_login(self):
         username = self.username_input.text()
         password = self.password_input.text()
-        
-        if not username or not password:
-            QMessageBox.warning(self, "Peringatan", "Email dan password harus diisi.")
+
+        result = login_user(username, password)  
+
+        if not result:
+            QMessageBox.warning(self, "Login Gagal", "Username atau password salah.")
             return
-        
-        user = login_user(username, password)  # Panggil dari database
-        
-        if user:
-            user_id, role = user
-            QMessageBox.information(self, "Sukses", f"Selamat datang, {username}!")
-            
+
+        user_id, role = result
+
+        # Buat objek sesuai role
+        try:
             if role == "admin":
-                from admin import AdminMenuWindow
-                self.menu_window = AdminMenuWindow(username, user_id)
-                self.menu_window.show()
-                self.close()
+                user_obj = Admin(user_id, username)
+            elif role == "siswa_super":
+                user_obj = SiswaSuper(user_id, username)
             else:
-                try:
-                    from menu import MenuWindow
-                    self.menu_window = MenuWindow(username, user_id)
-                    self.menu_window.show()
-                    self.close()
-                except Exception as e:
-                    print("Gagal membuka menu:", e)
+                user_obj = SiswaBiasa(user_id, username)
+        except ValueError as e:
+            QMessageBox.warning(self, "Error", f"Invalid user data: {e}")
+            return
 
-        else:
-            QMessageBox.warning(self, "Gagal", "Username atau password salah.")
 
+        QMessageBox.information(self, "Sukses", f"Selamat datang, {user_obj.username}!")
+
+        try:
+            if isinstance(user_obj, Admin):
+                from admin import AdminMenuWindow
+                # Pastikan argumen sesuai constructor AdminMenuWindow
+                self.menu_window = AdminMenuWindow(user_obj.username, user_obj.user_id)
+            else:
+                from menu import MenuWindow
+                self.menu_window = MenuWindow(user_obj.username, user_obj.user_id, email="...", role=user_obj.role)
+        
+            self.menu_window.show()
+            self.close()
+
+        except Exception as e:
+            print("Gagal membuka menu:", e)
+            QMessageBox.warning(self, "Error", f"Gagal membuka menu: {e}")
 
 
 class ForgotPasswordWindow(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Reset Password - Duolingo Sederhana")
+        self.setWindowIcon(QtGui.QIcon('logo.ico'))
         self.setFixedSize(720, 800)
         self.setStyleSheet("""
             QWidget {
